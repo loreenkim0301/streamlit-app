@@ -2,35 +2,62 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Streamlit 앱 설정
-st.title("검색 키워드 관심도 추이 분석 (2004-2025)")
+# Streamlit 앱 제목
+st.title("GPT 프롬프트 기반 데이터 시각화")
 
 # CSV 파일 업로드
 uploaded_file = st.file_uploader("CSV 파일을 업로드하세요", type=["csv"])
 
+# 파일이 업로드된 경우
 if uploaded_file is not None:
-    # CSV 파일 읽기
-    data = pd.read_csv(uploaded_file)
-    
-    # 첫 번째 열을 날짜/인덱스로 변환
-    data.set_index(data.columns[0], inplace=True)
-    data.index = pd.to_datetime(data.index)
+    # 데이터 읽기
+    try:
+        data = pd.read_csv(uploaded_file)
+        data.rename(columns={data.columns[0]: "Date"}, inplace=True)  # 첫 번째 열을 'Date'로 변경
+        data["Date"] = pd.to_datetime(data["Date"], errors='coerce')  # 날짜 변환
+        data.set_index("Date", inplace=True)
 
-    # 데이터 표시
-    st.write("업로드된 데이터:")
-    st.dataframe(data)
+        st.write("업로드된 데이터:")
+        st.dataframe(data)
 
-    # 그래프 그리기
-    st.write("검색 키워드 관심도 추이:")
-    plt.figure(figsize=(14, 8))
-    for column in data.columns:
-        plt.plot(data.index, data[column], label=column)
-    
-    plt.title("검색 키워드 관심도 추이 (2004-2025)", fontsize=16)
-    plt.xlabel("년도", fontsize=12)
-    plt.ylabel("검색 관심도", fontsize=12)
-    plt.legend(title="키워드", fontsize=10)
-    plt.grid(True)
-    
-    # Streamlit에 그래프 표시
-    st.pyplot(plt)
+        # 프롬프트 입력
+        st.write("### GPT 프롬프트 입력")
+        prompt = st.text_area("데이터를 필터링하거나 시각화할 프롬프트를 입력하세요.", 
+                              placeholder="예: '2020년 이후 데이터만 보여줘' 또는 'AI기획과 AI사업 키워드 그래프를 그려줘'")
+
+        # 프롬프트 처리
+        if st.button("결과 생성"):
+            if "이후" in prompt:
+                # '이후' 키워드를 기준으로 필터링
+                try:
+                    year = int(prompt.split("년")[0].strip())  # 입력된 연도 추출
+                    filtered_data = data[data.index.year >= year]
+                    st.write(f"필터링된 데이터 (기준: {year}년 이후):")
+                    st.dataframe(filtered_data)
+                except ValueError:
+                    st.error("연도를 정확히 입력해주세요 (예: '2020년 이후').")
+
+            elif "그래프" in prompt:
+                # 특정 컬럼 시각화
+                keywords = [word.strip() for word in prompt.split("그래프를 그려줘")[0].split("와")]
+                keywords = [kw for kw in keywords if kw in data.columns]  # 데이터에 존재하는 컬럼만 선택
+
+                if keywords:
+                    st.write(f"선택된 키워드: {', '.join(keywords)}")
+                    plt.figure(figsize=(14, 8))
+                    for column in keywords:
+                        plt.plot(data.index, data[column], label=column)
+                    
+                    plt.title("검색 키워드 관심도 추이 (필터링된 키워드)", fontsize=16)
+                    plt.xlabel("년도", fontsize=12)
+                    plt.ylabel("검색 관심도", fontsize=12)
+                    plt.legend(title="키워드", fontsize=10)
+                    plt.grid(True)
+                    st.pyplot(plt)
+                else:
+                    st.error("프롬프트에 유효한 키워드가 포함되어 있지 않습니다.")
+
+            else:
+                st.warning("프롬프트를 이해할 수 없습니다. '이후' 또는 '그래프'와 같은 명령을 포함해주세요.")
+    except Exception as e:
+        st.error(f"데이터 처리 중 오류가 발생했습니다: {e}")
